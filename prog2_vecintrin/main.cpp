@@ -301,7 +301,6 @@ void clampedExpVector(float *values, int *exponents, float *output, int N)
 
   while (1)
   {
-    printf("loop started\n");
     if (i < N)
     {
       maskAll = _cs149_init_ones();
