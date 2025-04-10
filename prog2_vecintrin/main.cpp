@@ -288,19 +288,64 @@ void clampedExpVector(float *values, int *exponents, float *output, int N)
   // N and VECTOR_WIDTH, not just when VECTOR_WIDTH divides N
   //
   __cs149_vec_float x;
+  __cs149_vec_int exp;
   __cs149_vec_float result;
-  __cs149_mask maskAll, maskIsNegative, maskIsNotNegative;
+  __cs149_vec_float clamp = _cs149_vset_float(9.999999);
+  __cs149_vec_int zeroInt = _cs149_vset_int(0);
+  __cs149_vec_int oneInt = _cs149_vset_int(1);
+  __cs149_vec_float oneFloat = _cs149_vset_float(1.0f);
+  __cs149_vec_float zeroFloat = _cs149_vset_float(0.0f);
+  __cs149_mask maskAll, maskExpIsZero, maskExpIsNotZero, maskIsLargerThanClamp, maskExpHasNotFinished;
 
   int i{0};
 
-  while (i < N)
+  while (1)
   {
+    if (i < N)
+    {
+      maskAll = _cs149_init_ones();
+    }
+    else if (i >= N && N % VECTOR_WIDTH != 0)
+    {
+      maskAll = _cs149_init_ones(i - N + 1);
+    }
+    else if (i >= N && N % VECTOR_WIDTH == 0)
+    {
+      break;
+    }
+
+    _cs149_vload_float(x, values + i, maskAll); // x = values[i]
+
+    _cs149_vload_int(exp, exponents + i, maskAll); // exp = exponents[i]
+
+    // set all results to be 1.0f
+    _cs149_vadd_float(result, oneFloat, zeroFloat, maskAll);
+
+    _cs149_veq_int(maskExpIsZero, exp, zeroInt, maskAll); // if (exp == 0)
+
+    maskExpIsNotZero = _cs149_mask_not(maskExpIsZero); // else
+
+    maskExpHasNotFinished = _cs149_mask_and(maskAll, maskExpIsNotZero);
+
+    while (_cs149_cntbits(maskExpHasNotFinished))
+    {
+      _cs149_vsub_int(exp, exp, oneInt, maskExpHasNotFinished);
+      _cs149_vmult_float(result, result, x, maskExpHasNotFinished);
+      _cs149_veq_int(maskExpHasNotFinished, exp, zeroInt, maskExpHasNotFinished);
+    }
+
+    _cs149_vgt_float(maskIsLargerThanClamp, result, clamp, maskAll);
+
+    _cs149_vadd_float(result, zeroFloat, clamp, maskIsLargerThanClamp);
+
+    _cs149_vstore_float(output + i, result, maskAll);
+
+    if (i >= N && N % VECTOR_WIDTH != 0)
+    {
+      break;
+    }
 
     i += VECTOR_WIDTH;
-
-    if (i + VECTOR_WIDTH >= N && N % VECTOR_WIDTH != 0)
-    {
-    }
   }
 }
 
