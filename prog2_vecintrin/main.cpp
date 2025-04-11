@@ -309,14 +309,15 @@ void clampedExpVector(float *values, int *exponents, float *output, int N)
     {
       maskAll = _cs149_init_ones(N - i);
     }
-    else break;
+    else
+      break;
 
     _cs149_vload_float(x, values + i, maskAll); // x = values[i]
 
     _cs149_vload_int(exp, exponents + i, maskAll); // exp = exponents[i]
 
     // set all results to be 1.0f
-    _cs149_vadd_float(result, oneFloat, zeroFloat, maskAll);
+    _cs149_vset_float(result, 1.0f, maskAll);
 
     _cs149_veq_int(maskExpIsZero, exp, zeroInt, maskAll); // if (exp == 0)
 
@@ -328,9 +329,9 @@ void clampedExpVector(float *values, int *exponents, float *output, int N)
     {
       _cs149_vsub_int(exp, exp, oneInt, maskExpHasNotFinished);
       _cs149_vmult_float(result, result, x, maskExpHasNotFinished);
-      _cs149_veq_int(maskExpIsZero, exp, zeroInt, maskAll);
-      maskExpIsNotZero = _cs149_mask_not(maskExpIsZero); 
-      maskExpHasNotFinished = _cs149_mask_and(maskAll, maskExpIsNotZero);
+      _cs149_veq_int(maskExpIsZero, exp, zeroInt, maskExpHasNotFinished);
+      maskExpIsNotZero = _cs149_mask_not(maskExpIsZero);
+      maskExpHasNotFinished = _cs149_mask_and(maskExpHasNotFinished, maskExpIsNotZero);
     }
 
     _cs149_vgt_float(maskIsLargerThanClamp, result, clamp, maskAll);
@@ -370,26 +371,24 @@ float arraySumVector(float *values, int N)
   // CS149 STUDENTS TODO: Implement your vectorized version of arraySumSerial here
   //
 
-  __cs149_vec_float x, result, temp;
+  __cs149_vec_float x;
   __cs149_mask maskAll, maskTemp;
-  float finalSum {0.0f}, tempSum[2000]{0.0f};
+  float finalSum{0.0f}, tempSum[2]{0.0f};
 
   for (int i = 0; i < N; i += VECTOR_WIDTH)
   {
     auto j = VECTOR_WIDTH;
     maskAll = _cs149_init_ones();
     _cs149_vload_float(x, values + i, maskAll);
-    _cs149_vstore_float(tempSum, x, maskAll);
-    
+
     while (j > 1)
     {
       j /= 2;
-      _cs149_hadd_float(temp, x);
-      _cs149_interleave_float(x, temp);
-      _cs149_vstore_float(tempSum, x, maskAll);
-      maskTemp = _cs149_init_ones(j);
+      _cs149_hadd_float(x, x);
+      _cs149_interleave_float(x, x);
     }
-    
+
+    maskTemp = _cs149_init_ones(1);
     _cs149_vstore_float(tempSum, x, maskTemp);
     finalSum += tempSum[0];
   }
