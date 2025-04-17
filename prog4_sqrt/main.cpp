@@ -22,26 +22,12 @@ static void verifyResult(int N, float *result, float *gold)
     }
 }
 
-bool is_mask_empty(__m256 mask)
-{
-    // Extract 32-bit elements of mask and check if all are 0
-    alignas(32) float mask_vals[8];
-    _mm256_store_ps(mask_vals, mask);
-    for (int i = 0; i < 8; ++i)
-    {
-        if (mask_vals[i] != 0.0f)
-            return false;
-    }
-    return true;
-}
-
 void sqrtAVX2(int N, float *values, float *output)
 {
     __m256 vec_threshhold = _mm256_set1_ps(0.00001f);
     for (int i = 0; i < N; i += 8)
     {
         __m256 vec_values = _mm256_loadu_ps(&values[i]);
-        __m256 vec_result = vec_values;
         __m256 vec_guess = _mm256_set1_ps(1.0f);
 
         __m256 vec_errors = _mm256_mul_ps(vec_guess, vec_guess);
@@ -51,13 +37,13 @@ void sqrtAVX2(int N, float *values, float *output)
 
         while (1)
         {
-            __m256 mask = _mm256_cmp_ps(vec_errors, vec_threshhold, _CMP_LT_OQ);
-            if (is_mask_empty(mask))
+            __m256 mask = _mm256_cmp_ps(vec_errors, vec_threshhold, _CMP_GT_OQ);
+            if (_mm256_testz_ps(mask, mask))
                 break;
             __m256 a = _mm256_mul_ps(vec_guess, _mm256_set1_ps(3.f));
             __m256 b = _mm256_mul_ps(vec_guess, _mm256_mul_ps(vec_guess, _mm256_mul_ps(vec_guess, vec_values)));
-            __m256 temp_guess = _mm256_mul_ps(a, b);
-            temp_guess = _mm256_mul_ps(vec_guess, _mm256_set1_ps(0.5f));
+            __m256 temp_guess = _mm256_sub_ps(a, b);
+            temp_guess = _mm256_mul_ps(temp_guess, _mm256_set1_ps(0.5f));
             __m256 temp_errors = _mm256_mul_ps(temp_guess, _mm256_mul_ps(temp_guess, vec_values));
             temp_errors = _mm256_sub_ps(temp_errors, _mm256_set1_ps(1.0f));
             temp_errors = _mm256_and_ps(temp_errors, _mm256_castsi256_ps(_mm256_set1_epi32(0x7FFFFFFF)));
@@ -65,7 +51,7 @@ void sqrtAVX2(int N, float *values, float *output)
             vec_errors = _mm256_blendv_ps(vec_errors, temp_errors, mask);
         }
 
-        _mm256_storeu_ps(&vec_result[i], _mm256_mul_ps(vec_guess, vec_errors));
+        _mm256_storeu_ps(&output[i], _mm256_mul_ps(vec_guess, vec_values));
     }
 }
 
@@ -86,16 +72,16 @@ int main()
         // to you generate best and worse-case speedups
 
         // starter code populates array with random input values
-        // values[i] = .001f + 2.998f * static_cast<float>(rand()) / RAND_MAX;
+        values[i] = .001f + 2.998f * static_cast<float>(rand()) / RAND_MAX;
 
         // maximum speedup
         // values[i] = 2.999f;
 
         // minimum speedup
-        if (i % 8 == 0)
-            values[i] = 2.999f;
-        else
-            values[i] = 1.0f;
+        // if (i % 8 == 0)
+        //     values[i] = 2.999f;
+        // else
+        //     values[i] = 1.0f;
     }
 
     // generate a gold version to check results
@@ -123,25 +109,33 @@ int main()
     // Compute the image using the ispc implementation; report the minimum
     // time of three runs.
     //
-    // double minISPC = 1e30;
-    // for (int i = 0; i < 3; ++i)
-    // {
-    //     double startTime = CycleTimer::currentSeconds();
-    //     sqrt_ispc(N, initialGuess, values, output);
-    //     double endTime = CycleTimer::currentSeconds();
-    //     minISPC = std::min(minISPC, endTime - startTime);
-    // }
-
     double minISPC = 1e30;
     for (int i = 0; i < 3; ++i)
     {
         double startTime = CycleTimer::currentSeconds();
-        sqrtAVX2(N, values, output);
+        sqrt_ispc(N, initialGuess, values, output);
         double endTime = CycleTimer::currentSeconds();
         minISPC = std::min(minISPC, endTime - startTime);
     }
 
     printf("[sqrt ispc]:\t\t[%.3f] ms\n", minISPC * 1000);
+
+    verifyResult(N, output, gold);
+
+    //
+    // Compute the image using the manually implemented avx2 implementation; report the minimum
+    // time of three runs.
+    //
+    double minAVX = 1e30;
+    for (int i = 0; i < 3; ++i)
+    {
+        double startTime = CycleTimer::currentSeconds();
+        sqrtAVX2(N, values, output);
+        double endTime = CycleTimer::currentSeconds();
+        minAVX = std::min(minAVX, endTime - startTime);
+    }
+
+    printf("[sqrt avx]:\t\t[%.3f] ms\n", minAVX * 1000);
 
     verifyResult(N, output, gold);
 
@@ -166,6 +160,7 @@ int main()
     verifyResult(N, output, gold);
 
     printf("\t\t\t\t(%.2fx speedup from ISPC)\n", minSerial / minISPC);
+    printf("\t\t\t\t(%.2fx speedup from AVX)\n", minSerial / minAVX);
     printf("\t\t\t\t(%.2fx speedup from task ISPC)\n", minSerial / minTaskISPC);
 
     delete[] values;
