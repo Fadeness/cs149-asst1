@@ -6,9 +6,7 @@ export void saxpy_ispc(uniform int N,
                             uniform float result[])
 {
     foreach (i = 0 ... N) {     
-        // result[i] = scale * X[i] + Y[i];
-        X[i] = X[i] * scale;
-        result[i] = X[i] + Y[i];
+        result[i] = scale * X[i] + Y[i];
     }
 }
 
